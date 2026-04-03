@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TREASURE SCRATCH</title>
+    <style>
+        :root {
+            --gold-gradient: linear-gradient(135deg, #ffecb3 0%, #ffcc00 50%, #b8860b 100%);
+            --bg-color: #000000;
+            --card-inner: #111111;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: #ffffff;
+            font-family: 'Arial Black', sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* दोन शब्दांचे मोठे टायटल */
+        .game-title {
+            font-size: 3.5rem;
+            line-height: 1;
+            text-align: center;
+            background: var(--gold-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 10px 0;
+            text-transform: uppercase;
+            filter: drop-shadow(0 0 15px rgba(255, 204, 0, 0.4));
+        }
+
+        .stats-bar {
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+            color: #ffcc00;
+            border: 1px solid #333;
+            padding: 5px 20px;
+            border-radius: 30px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* रिस्पॉन्सिव्ह गेम कंटेनर */
+        .scratch-container {
+            position: relative;
+            width: 90vw;
+            max-width: 360px;
+            aspect-ratio: 1 / 1;
+            background: var(--card-inner);
+            border: 6px solid #222;
+            border-radius: 24px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* लपवलेले बक्षीस (Stickers) */
+        .prize-reveal {
+            text-align: center;
+            z-index: 1;
+        }
+
+        .emoji-sticker {
+            font-size: 110px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .amount-text {
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: #ffcc00;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        .play-btn {
+            margin-top: 30px;
+            padding: 15px 45px;
+            background: var(--gold-gradient);
+            border: none;
+            border-radius: 50px;
+            color: #000;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            display: none;
+            box-shadow: 0 10px 20px rgba(255, 204, 0, 0.3);
+        }
+
+        /* विनिंग इफेक्ट */
+        .win-glow {
+            animation: glow-pulse 1s infinite alternate;
+            border-color: #ffcc00;
+        }
+
+        @keyframes glow-pulse {
+            from { box-shadow: 0 0 20px rgba(255, 204, 0, 0.2); }
+            to { box-shadow: 0 0 50px rgba(255, 204, 0, 0.6); }
+        }
+
+        @media (max-width: 400px) {
+            .game-title { font-size: 2.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1 class="game-title">TREASURE<br>SCRATCH</h1>
+
+    <div class="stats-bar">
+        TOTAL: <span id="total-score">$0</span>
+    </div>
+
+    <div class="scratch-container" id="container">
+        <div class="prize-reveal">
+            <span class="emoji-sticker" id="sticker-display">💎</span>
+            <span class="amount-text" id="amount-display">$0</span>
+        </div>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <button class="play-btn" id="next-btn" onclick="resetGame()">NEXT CARD</button>
+
+    <audio id="win-sound" src="https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3"></audio>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const nextBtn = document.getElementById('next-btn');
+        const totalScoreEl = document.getElementById('total-score');
+        const winSound = document.getElementById('win-sound');
+
+        let isDrawing = false;
+        let totalWin = 0;
+
+        const rewards = [
+            { icon: "💰", val: 50000 },
+            { icon: "👑", val: 1000000 },
+            { icon: "💍", val: 250000 },
+            { icon: "🏎️", val: 85000 },
+            { icon: "🎁", val: 10000 },
+            { icon: "💎", val: 500000 },
+            { icon: "💵", val: 5000 },
+            { icon: "🏧", val: 150000 }
+        ];
+
+        function initCanvas() {
+            const size = document.getElementById('container').offsetWidth;
+            canvas.width = size;
+            canvas.height = size;
+            
+            // Draw Gold Cover
+            ctx.globalCompositeOperation = 'source-over';
+            const g = ctx.createLinearGradient(0, 0, size, size);
+            g.addColorStop(0, '#D4AF37');
+            g.addColorStop(0.5, '#FFD700');
+            g.addColorStop(1, '#8B6508');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, size, size);
+
+            // Cover Text
+            ctx.fillStyle = "#443300";
+            ctx.font = "bold 22px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("SCRATCH HERE", size/2, size/2);
+            
+            ctx.globalCompositeOperation = 'destination-out';
+        }
+
+        function resetGame() {
+            nextBtn.style.display = 'none';
+            document.getElementById('container').classList.remove('win-glow');
+            
+            const prize = rewards[Math.floor(Math.random() * rewards.length)];
+            document.getElementById('sticker-display').innerText = prize.icon;
+            document.getElementById('amount-display').innerText = "$" + prize.val.toLocaleString();
+            
+            initCanvas();
+        }
+
+        function scratch(e) {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX || e.touches[0].clientX) - rect.left;
+            const y = (e.clientY || e.touches[0].clientY) - rect.top;
+
+            ctx.lineWidth = 50;
+            ctx.lineCap = 'round';
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            
+            checkScratch();
+        }
+
+        function checkScratch() {
+            const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            let count = 0;
+            for (let i = 3; i < data.length; i += 40) {
+                if (data[i] === 0) count++;
+            }
+            if (count > (data.length / 80)) reveal();
+        }
+
+        function reveal() {
+            if (nextBtn.style.display === 'block') return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            nextBtn.style.display = 'block';
+            document.getElementById('container').classList.add('win-glow');
+            
+            const val = parseInt(document.getElementById('amount-display').innerText.replace(/[^0-9]/g, ''));
+            totalWin += val;
+            totalScoreEl.innerText = "$" + totalWin.toLocaleString();
+            
+            winSound.currentTime = 0;
+            winSound.play();
+        }
+
+        canvas.addEventListener('mousedown', () => isDrawing = true);
+        window.addEventListener('mousemove', scratch);
+        window.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('touchstart', (e) => { isDrawing = true; scratch(e); });
+        window.addEventListener('touchmove', (e) => { e.preventDefault(); scratch(e); }, {passive: false});
+        window.addEventListener('touchend', () => isDrawing = false);
+
+        window.onload = resetGame;
+        window.onresize = initCanvas;
+    </script>
+</body>
+</html>
